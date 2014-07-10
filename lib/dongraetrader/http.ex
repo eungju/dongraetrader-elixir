@@ -28,7 +28,9 @@ defmodule DongraeTrader.HTTP do
     end
 
     defp version_to_string(version) do
-      version |> to_string |> String.upcase |> String.replace("_", "/", global: false) |> String.replace("_", ".", global: false)
+      version |> to_string |> String.upcase
+      |> String.replace("_", "/", global: false)
+      |> String.replace("_", ".", global: false)
     end
 
     def encode_headers(headers) do
@@ -67,9 +69,9 @@ defmodule DongraeTrader.HTTP do
           case next_state do
             {:ok, [_, r, _, c, _, v], rest} ->
               {:ok, [{v |> string_to_version, String.to_integer(c), r}|acc], rest}
-            :error -> :error
+            {:error, _} = error -> error
            end
-        :error -> :error
+        {:error, _} = error -> error
       end
     end
 
@@ -79,16 +81,16 @@ defmodule DongraeTrader.HTTP do
 
     def decode_headers(state) do
       case state do
-        {:ok, acc, input} ->
+        {:ok, _acc, _input} ->
           decode_headers(state, [])
-        :error -> :error
+        {:error, _} = error -> error
       end
     end
 
     def decode_headers({:ok, acc, input}, headers) do
       case decode_header({:ok, [], input}) do
         {:ok, [header], rest} -> decode_headers({:ok, acc, rest}, [header|headers])
-        :error -> {:ok, [Enum.reverse(headers)|acc], input}
+        {:error, _} -> {:ok, [Enum.reverse(headers)|acc], input}
       end
     end
 
@@ -103,9 +105,9 @@ defmodule DongraeTrader.HTTP do
           case next_state do
             {:ok, [_, value, _, name], rest} ->
               {:ok, [{name |> string_to_header_name, value}|acc], rest}
-            :error -> :error
+            {:error, _} = error -> error
            end
-        :error -> :error
+        {:error, _} = error -> error
       end
     end
 
@@ -120,12 +122,12 @@ defmodule DongraeTrader.HTTP do
                         |> String.to_integer
           input_length = byte_size(input)
           if body_length > input_length  do
-            :error
+            {:error, :unexpected_end_of_input}
           else
             {body, rest} = String.split_at(input, body_length)
             {:ok, [body|acc], rest}
           end
-        :error -> :error
+        {:error, _} = error -> error
       end
     end
 
@@ -138,10 +140,13 @@ defmodule DongraeTrader.HTTP do
               rest = binary_part(input, s + l, byte_size(input) - (s + l))
               {:ok, [token|acc], rest}
             nil ->
-              :error
+              reason = case input do
+                         "" -> :unexpected_end_of_input
+                         _ -> :unexpected_input
+                       end
+              {:error, reason}
           end
-        :error ->
-          :error
+        {:error, _} = error -> error
       end
     end
   end

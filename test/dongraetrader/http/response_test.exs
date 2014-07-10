@@ -7,11 +7,11 @@ defmodule DongraeTrader.HTTP.ResponseTest do
   end
 
   test "decode regex pattern, but failed due to unexpected end of input" do
-    assert :error == HTTP.Response.decode_pattern({:ok, [], ""}, ~r/^\d+/)
+    assert {:error, :unexpected_end_of_input} == HTTP.Response.decode_pattern({:ok, [], ""}, ~r/^\d+/)
   end
 
   test "decode regex pattern, but failed due to unexpected input" do
-    assert :error == HTTP.Response.decode_pattern({:ok, [], "OK"}, ~r/^\d+/)
+    assert {:error, :unexpected_input} == HTTP.Response.decode_pattern({:ok, [], "OK"}, ~r/^\d+/)
   end
 
   test "decode status line" do
