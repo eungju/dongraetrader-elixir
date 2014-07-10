@@ -49,14 +49,14 @@ defmodule DongraeTrader.HTTP do
     defstruct version: nil, code: nil, reason: nil, headers: nil, body: nil
 
     def decode(input) do
-      {:ok, [body, _, headers, status_line], <<>>} = {:ok, [], input}
+      {:ok, [body, _, headers, status_line], rest} = {:ok, [], input}
                                                   |> decode_status_line
                                                   |> decode_headers
                                                   |> decode_pattern(~r/^\r\n/)
                                                   |> decode_body
       {version, code, reason} = status_line
       {:ok, %Response{version: version, code: code, reason: reason,
-                      headers: headers, body: body}, ""}
+                      headers: headers, body: body}, rest}
     end
 
     def decode_status_line(state) do
@@ -167,7 +167,7 @@ defmodule DongraeTrader.HTTP do
     def call(conn, request) do
       :ok = :gen_tcp.send(conn.socket, Request.encode(request))
       {:ok, packet} = :gen_tcp.recv(conn.socket, 0)
-      {:ok, response, _rest} = Response.decode(packet)
+      {:ok, response, <<>>} = Response.decode(packet)
       {:ok, response}
     end
   end
