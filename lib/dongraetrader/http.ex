@@ -48,8 +48,106 @@ defmodule DongraeTrader.HTTP do
   defmodule Response do
     defstruct version: nil, code: nil, reason: nil, headers: nil, body: nil
 
-    def decode(buffer) do
-      {:ok, %Response{}}
+    def decode(input) do
+      {:ok, [body, _, headers, status_line], <<>>} = {:ok, [], input}
+                                                  |> decode_status_line
+                                                  |> decode_headers
+                                                  |> decode_pattern(~r/^\r\n/)
+                                                  |> decode_body
+      {version, code, reason} = status_line
+      {:ok, %Response{version: version, code: code, reason: reason,
+                      headers: headers, body: body}, ""}
+    end
+
+    def decode_status_line(state) do
+      case state do
+        {:ok, acc, input} ->
+          next_state = {:ok, [], input}
+                       |> decode_pattern(~r/^HTTP\/\d+\.\d+/)
+                       |> decode_pattern(~r/^ /)
+                       |> decode_pattern(~r/^\d+/)
+                       |> decode_pattern(~r/^ /)
+                       |> decode_pattern(~r/^[^\r]+/)
+                       |> decode_pattern(~r/^\r\n/)
+          case next_state do
+            {:ok, [_, r, _, c, _, v], rest} ->
+              {:ok, [{v |> string_to_version, String.to_integer(c), r}|acc], rest}
+            :error -> :error
+           end
+        :error -> :error
+      end
+    end
+
+    defp string_to_version(s) do
+      s |> String.downcase |> String.replace(~r/\/|\./, "_") |> String.to_atom
+    end
+
+    def decode_headers(state) do
+      case state do
+        {:ok, acc, input} ->
+          decode_headers(state, [])
+        :error -> :error
+      end
+    end
+
+    def decode_headers({:ok, acc, input}, headers) do
+      case decode_header({:ok, [], input}) do
+        {:ok, [header], rest} -> decode_headers({:ok, acc, rest}, [header|headers])
+        :error -> {:ok, [Enum.reverse(headers)|acc], input}
+      end
+    end
+
+    def decode_header(state) do
+      case state do
+        {:ok, acc, input} ->
+          next_state = {:ok, [], input}
+                       |> decode_pattern(~r/^[^:]+/)
+                       |> decode_pattern(~r/^:\s+/)
+                       |> decode_pattern(~r/^[^\r]+/)
+                       |> decode_pattern(~r/^\r\n/)
+          case next_state do
+            {:ok, [_, value, _, name], rest} ->
+              {:ok, [{name |> string_to_header_name, value}|acc], rest}
+            :error -> :error
+           end
+        :error -> :error
+      end
+    end
+
+    defp string_to_header_name(s) do
+      s |> String.downcase |> String.replace("-", "_") |> String.to_atom
+    end
+
+    def decode_body(state) do
+      case state do
+        {:ok, [_crlf, headers, _status_line]=acc, input} ->
+          body_length = Keyword.get(headers, :content_length, "0")
+                        |> String.to_integer
+          input_length = byte_size(input)
+          if body_length > input_length  do
+            :error
+          else
+            {body, rest} = String.split_at(input, body_length)
+            {:ok, [body|acc], rest}
+          end
+        :error -> :error
+      end
+    end
+
+    def decode_pattern(state, regex) do
+      case state do
+        {:ok, acc, input} ->
+          case Regex.run(regex, input, return: :index) do
+            [{s, l}] ->
+              token = binary_part(input, s, l)
+              rest = binary_part(input, s + l, byte_size(input) - (s + l))
+              {:ok, [token|acc], rest}
+            nil ->
+              :error
+          end
+        :error ->
+          :error
+      end
     end
   end
 
@@ -66,10 +164,11 @@ defmodule DongraeTrader.HTTP do
       :ok = :gen_tcp.close(conn.socket)
     end
 
-    def send_and_receive(conn, request) do
+    def call(conn, request) do
       :ok = :gen_tcp.send(conn.socket, Request.encode(request))
       {:ok, packet} = :gen_tcp.recv(conn.socket, 0)
-      Response.decode(packet)
+      {:ok, response, _rest} = Response.decode(packet)
+      {:ok, response}
     end
   end
 end

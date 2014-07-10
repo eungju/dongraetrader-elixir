@@ -9,7 +9,7 @@ defmodule DongraeTrader.HTTPTest do
 
   test "GET request" do
     {:ok, conn} = HTTP.Connection.open("localhost", 1978)
-    {:ok, response} = HTTP.Connection.send_and_receive(conn, HTTP.Request.get("/"))
+    {:ok, _response} = HTTP.Connection.call(conn, HTTP.Request.get("/"))
     :ok = HTTP.Connection.close(conn)
   end
 end
