@@ -9,13 +9,13 @@ defmodule DongraeTrader.HTTP do
     def post(uri, content_type, body) do
       body_length = IO.iodata_length(body)
       %Request{method: :post, uri: uri, version: :http_1_1,
-               headers: [{:content_type, content_type}, {:content_length, body_length}], body: body}
+               headers: [{:content_type, content_type}, {:content_length, to_string(body_length)}], body: body}
     end
 
     def encode(request) do
       [encode_request_line(request.method, request.uri, request.version),
        encode_headers(request.headers),
-       "\n",
+       "\r\n",
        request.body]
     end
 
@@ -33,7 +33,7 @@ defmodule DongraeTrader.HTTP do
          :http_1_0 -> " HTTP/1.0"
          :http_1_1 -> " HTTP/1.1"
        end,
-       "\n"]
+       "\r\n"]
     end
 
     def encode_headers(headers) do
@@ -41,7 +41,7 @@ defmodule DongraeTrader.HTTP do
     end
 
     def encode_header({name, value}) do
-      [to_string(name) |> String.split("_") |> Enum.map_join("-", &String.capitalize/1), ": ", to_string(value), "\n"]
+      [to_string(name) |> String.split("_") |> Enum.map_join("-", &String.capitalize/1), ": ", value, "\r\n"]
     end
   end
 
