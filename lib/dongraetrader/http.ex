@@ -20,20 +20,15 @@ defmodule DongraeTrader.HTTP do
     end
 
     def encode_request_line(method, uri, version) do
-      [case method do
-         :options -> "OPTIONS"
-         :get -> "GET"
-         :head -> "HEAD"
-         :post -> "POST"
-         :put -> "PUT"
-         :delete -> "DELETE"
-       end,
-       " ", uri,
-       case version do
-         :http_1_0 -> " HTTP/1.0"
-         :http_1_1 -> " HTTP/1.1"
-       end,
-       "\r\n"]
+      [method_to_string(method), " ", uri, " ", version_to_string(version), "\r\n"]
+    end
+
+    defp method_to_string(method) do
+      method |> to_string |> String.upcase
+    end
+
+    defp version_to_string(version) do
+      version |> to_string |> String.upcase |> String.replace("_", "/", global: false) |> String.replace("_", ".", global: false)
     end
 
     def encode_headers(headers) do
