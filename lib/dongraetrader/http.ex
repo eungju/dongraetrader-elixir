@@ -165,10 +165,16 @@ defmodule DongraeTrader.HTTP do
     end
 
     def call(conn, request) do
-      :ok = :gen_tcp.send(conn.socket, Request.encode(request))
+      send_buf = Request.encode(decorate_request(conn, request))
+      :ok = :gen_tcp.send(conn.socket, send_buf)
       {:ok, packet} = :gen_tcp.recv(conn.socket, 0)
       {:ok, response, <<>>} = Response.decode(packet)
       {:ok, response}
+    end
+
+    def decorate_request(conn, request) do
+      host_value = conn.host <> ":" <> to_string(conn.port)
+      %{request | headers: Keyword.put_new(request.headers, :host, host_value)}
     end
   end
 end
