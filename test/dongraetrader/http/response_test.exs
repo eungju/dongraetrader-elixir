@@ -30,4 +30,8 @@ defmodule DongraeTrader.HTTP.ResponseTest do
   test "decode response" do
     assert {:ok, %HTTP.Response{version: :http_1_1, code: 200, reason: "OK", headers: [content_length: "5"], body: "HELLO"}, <<>>} == HTTP.Response.decode("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nHELLO")
   end
+
+  test "decode incomplete response" do
+    assert {:error, :unexpected_end_of_input} == HTTP.Response.decode("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nHELL")
+  end
 end

@@ -47,15 +47,18 @@ defmodule DongraeTrader.HTTP do
     defstruct version: nil, code: nil, reason: nil, headers: nil, body: nil
 
     def decode(input) do
-      {:ok, ast, rest} = {:ok, [], input}
-                         |> decode_status_line
-                         |> decode_headers
-                         |> decode_pattern(~r/^\r\n/)
-                         |> decode_body;
-      [body, _, headers, status_line] = ast
-      {version, code, reason} = status_line
-      {:ok, %Response{version: version, code: code, reason: reason,
-                      headers: headers, body: body}, rest}
+      result = {:ok, [], input} |> decode_status_line
+                                |> decode_headers
+                                |> decode_pattern(~r/^\r\n/)
+                                |> decode_body
+      case result do
+        {:ok, ast, rest} ->
+          [body, _, headers, status_line] = ast
+          {version, code, reason} = status_line
+          {:ok, %Response{version: version, code: code, reason: reason,
+                          headers: headers, body: body}, rest}
+        {:error, _} = error -> error
+      end
     end
 
     def decode_status_line(state) do
@@ -169,17 +172,26 @@ defmodule DongraeTrader.HTTP do
     end
 
     def call(conn, request) do
+      case _send_request(conn, request) do
+        :ok -> _recv_response(conn, <<>>)
+        {:error, _} = error -> error
+      end
+    end
+
+    def _send_request(conn, request) do
       send_buf = Request.encode(decorate_request(conn, request))
-      case :gen_tcp.send(conn.socket, send_buf) do
-        :ok ->
-          case :gen_tcp.recv(conn.socket, 0) do
-            {:ok, packet} ->
-              case Response.decode(packet) do
-                {:ok, response, <<>>} -> {:ok, response}
-                {:error, _} = error -> error
-                _ -> {:error, :unknown}
-              end
+      :gen_tcp.send(conn.socket, send_buf)
+    end
+
+    def _recv_response(conn, recv_buf) do
+      case :gen_tcp.recv(conn.socket, 0) do
+        {:ok, packet} ->
+          recv_buf = recv_buf <> packet
+          case Response.decode(recv_buf) do
+            {:ok, response, <<>>} -> {:ok, response}
+            {:error, :unexpected_end_of_input} -> _recv_response(conn, recv_buf)
             {:error, _} = error -> error
+            _ -> {:error, :unknown}
           end
         {:error, _} = error -> error
       end
