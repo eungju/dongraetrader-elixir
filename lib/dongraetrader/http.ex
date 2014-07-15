@@ -156,20 +156,33 @@ defmodule DongraeTrader.HTTP do
     defstruct host: nil, port: nil, socket: nil
 
     def open(host, port) do
-      {:ok, socket} = :gen_tcp.connect(to_char_list(host), port, [:binary, active: false])
-      {:ok, %Connection{host: host, port: port, socket: socket}}
+      options = [:binary, active: false]
+      case :gen_tcp.connect(to_char_list(host), port, options) do
+        {:ok, socket} ->
+          {:ok, %Connection{host: host, port: port, socket: socket}}
+        {:error, _} = error -> error
+      end
     end
 
     def close(conn) do
-      :ok = :gen_tcp.close(conn.socket)
+      :gen_tcp.close(conn.socket)
     end
 
     def call(conn, request) do
       send_buf = Request.encode(decorate_request(conn, request))
-      :ok = :gen_tcp.send(conn.socket, send_buf)
-      {:ok, packet} = :gen_tcp.recv(conn.socket, 0)
-      {:ok, response, <<>>} = Response.decode(packet)
-      {:ok, response}
+      case :gen_tcp.send(conn.socket, send_buf) do
+        :ok ->
+          case :gen_tcp.recv(conn.socket, 0) do
+            {:ok, packet} ->
+              case Response.decode(packet) do
+                {:ok, response, <<>>} -> {:ok, response}
+                {:error, _} = error -> error
+                _ -> {:error, :unknown}
+              end
+            {:error, _} = error -> error
+          end
+        {:error, _} = error -> error
+      end
     end
 
     def decorate_request(conn, request) do
