@@ -8,12 +8,12 @@ defmodule DongraeTrader.HTTP.RequestTest do
   end
 
   test "encode header" do
-    actual = HTTP.Request.encode_header({:content_length, "1"})
+    actual = HTTP.Request.encode_header({:content_length, 1})
     assert IO.iodata_to_binary(actual) == "Content-Length: 1\r\n"
   end
 
   test "encode headers" do
-    actual = HTTP.Request.encode_headers([{:content_length, "1"},
+    actual = HTTP.Request.encode_headers([{:content_length, 1},
                                           {:content_type, "text/html"}])
     assert IO.iodata_to_binary(actual) == "Content-Length: 1\r\nContent-Type: text/html\r\n"
   end

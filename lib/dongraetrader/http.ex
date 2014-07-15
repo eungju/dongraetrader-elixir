@@ -7,9 +7,10 @@ defmodule DongraeTrader.HTTP do
     end
 
     def post(uri, content_type, body) do
-      body_length = IO.iodata_length(body)
+      headers = [content_type: content_type,
+                 content_length: IO.iodata_length(body)]
       %Request{method: :post, uri: uri, version: :http_1_1,
-               headers: [{:content_type, content_type}, {:content_length, to_string(body_length)}], body: body}
+               headers: headers, body: body}
     end
 
     def encode(request) do
@@ -38,7 +39,7 @@ defmodule DongraeTrader.HTTP do
     end
 
     def encode_header({name, value}) do
-      [to_string(name) |> String.split("_") |> Enum.map_join("-", &String.capitalize/1), ": ", value, "\r\n"]
+      [to_string(name) |> String.split("_") |> Enum.map_join("-", &String.capitalize/1), ": ", to_string(value), "\r\n"]
     end
   end
 
@@ -46,11 +47,12 @@ defmodule DongraeTrader.HTTP do
     defstruct version: nil, code: nil, reason: nil, headers: nil, body: nil
 
     def decode(input) do
-      {:ok, [body, _, headers, status_line], rest} = {:ok, [], input}
-                                                  |> decode_status_line
-                                                  |> decode_headers
-                                                  |> decode_pattern(~r/^\r\n/)
-                                                  |> decode_body
+      {:ok, ast, rest} = {:ok, [], input}
+                         |> decode_status_line
+                         |> decode_headers
+                         |> decode_pattern(~r/^\r\n/)
+                         |> decode_body;
+      [body, _, headers, status_line] = ast
       {version, code, reason} = status_line
       {:ok, %Response{version: version, code: code, reason: reason,
                       headers: headers, body: body}, rest}
@@ -81,15 +83,14 @@ defmodule DongraeTrader.HTTP do
 
     def decode_headers(state) do
       case state do
-        {:ok, _acc, _input} ->
-          decode_headers(state, [])
+        {:ok, acc, input} -> decode_headers({:ok, acc, input}, [])
         {:error, _} = error -> error
       end
     end
 
     def decode_headers({:ok, acc, input}, headers) do
-      case decode_header({:ok, [], input}) do
-        {:ok, [header], rest} -> decode_headers({:ok, acc, rest}, [header|headers])
+      case decode_header({:ok, headers, input}) do
+        {:ok, more_headers, rest} -> decode_headers({:ok, acc, rest}, more_headers)
         {:error, _} -> {:ok, [Enum.reverse(headers)|acc], input}
       end
     end
@@ -155,8 +156,7 @@ defmodule DongraeTrader.HTTP do
     defstruct host: nil, port: nil, socket: nil
 
     def open(host, port) do
-      {:ok, socket} = :gen_tcp.connect(to_char_list(host), port,
-                                       [:binary, active: false])
+      {:ok, socket} = :gen_tcp.connect(to_char_list(host), port, [:binary, active: false])
       {:ok, %Connection{host: host, port: port, socket: socket}}
     end
 
