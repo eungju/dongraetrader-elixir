@@ -1,4 +1,33 @@
 defmodule DongraeTrader.HTTP do
+  defmodule Version do
+    def to_string(version) do
+      version |> Atom.to_string |> String.upcase
+      |> String.replace("_", "/", global: false)
+      |> String.replace("_", ".", global: false)
+    end
+
+    def from_string(s) do
+      s |> String.downcase |> String.replace(~r/\/|\./, "_") |> String.to_atom
+    end
+  end
+
+  defmodule Method do
+    def to_string(method) do
+      method |> Atom.to_string |> String.upcase
+    end
+  end
+
+  defmodule HeaderName do
+    def to_string(name) do
+      name |> Atom.to_string
+      |> String.split("_") |> Enum.map_join("-", &String.capitalize/1)
+    end
+
+    def from_string(s) do
+      s |> String.downcase |> String.replace("-", "_") |> String.to_atom
+    end
+  end
+
   defmodule Request do
     defstruct method: nil, uri: nil, version: nil, headers: [], body: <<>>
 
@@ -21,17 +50,7 @@ defmodule DongraeTrader.HTTP do
     end
 
     def encode_request_line(method, uri, version) do
-      [method_to_string(method), " ", uri, " ", version_to_string(version), "\r\n"]
-    end
-
-    defp method_to_string(method) do
-      method |> to_string |> String.upcase
-    end
-
-    defp version_to_string(version) do
-      version |> to_string |> String.upcase
-      |> String.replace("_", "/", global: false)
-      |> String.replace("_", ".", global: false)
+      [Method.to_string(method), " ", uri, " ", Version.to_string(version), "\r\n"]
     end
 
     def encode_headers(headers) do
@@ -39,7 +58,7 @@ defmodule DongraeTrader.HTTP do
     end
 
     def encode_header({name, value}) do
-      [to_string(name) |> String.split("_") |> Enum.map_join("-", &String.capitalize/1), ": ", to_string(value), "\r\n"]
+      [HeaderName.to_string(name), ": ", to_string(value), "\r\n"]
     end
   end
 
@@ -73,15 +92,11 @@ defmodule DongraeTrader.HTTP do
                        |> decode_pattern(~r/^\r\n/)
           case next_state do
             {:ok, [_, r, _, c, _, v], rest} ->
-              {:ok, [{v |> string_to_version, String.to_integer(c), r}|acc], rest}
+              {:ok, [{v |> Version.from_string, String.to_integer(c), r}|acc], rest}
             {:error, _} = error -> error
            end
         {:error, _} = error -> error
       end
-    end
-
-    defp string_to_version(s) do
-      s |> String.downcase |> String.replace(~r/\/|\./, "_") |> String.to_atom
     end
 
     def decode_headers(state) do
@@ -108,15 +123,11 @@ defmodule DongraeTrader.HTTP do
                        |> decode_pattern(~r/^\r\n/)
           case next_state do
             {:ok, [_, value, _, name], rest} ->
-              {:ok, [{name |> string_to_header_name, value}|acc], rest}
+              {:ok, [{name |> HeaderName.from_string, value}|acc], rest}
             {:error, _} = error -> error
            end
         {:error, _} = error -> error
       end
-    end
-
-    defp string_to_header_name(s) do
-      s |> String.downcase |> String.replace("-", "_") |> String.to_atom
     end
 
     def decode_body(state) do
