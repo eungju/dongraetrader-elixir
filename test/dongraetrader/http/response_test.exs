@@ -2,16 +2,16 @@ defmodule DongraeTrader.HTTP.ResponseTest do
   use ExUnit.Case
   alias DongraeTrader.HTTP, as: HTTP
 
-  test "decode regex pattern" do
-    assert {:ok, ["200"], " OK\r\n"} == HTTP.Response.decode_pattern({:ok, [], "200 OK\r\n"}, ~r/^\d+/)
+  test "regex success" do
+    assert {:ok, ["200"], " OK\r\n"} == HTTP.Response.regex(~r/^\d+/).({:ok, [], "200 OK\r\n"})
   end
 
-  test "decode regex pattern, but failed due to unexpected end of input" do
-    assert {:error, :unexpected_end_of_input} == HTTP.Response.decode_pattern({:ok, [], ""}, ~r/^\d+/)
+  test "regex failure, due to unexpected end of input" do
+    assert {:error, :unexpected_end_of_input} == HTTP.Response.regex(~r/^\d+/).({:ok, [], ""})
   end
 
-  test "decode regex pattern, but failed due to unexpected input" do
-    assert {:error, :unexpected_input} == HTTP.Response.decode_pattern({:ok, [], "OK"}, ~r/^\d+/)
+  test "regex failure, due to unexpected input" do
+    assert {:error, :unexpected_input} == HTTP.Response.regex(~r/^\d+/).({:ok, [], "OK"})
   end
 
   test "decode status line" do

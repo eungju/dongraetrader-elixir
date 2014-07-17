@@ -73,7 +73,7 @@ defmodule DongraeTrader.HTTP do
       result = {:ok, [], input}
                |> decode_status_line
                |> decode_headers
-               |> decode_pattern(~r/^\r\n/)
+               |> regex(~r/^\r\n/).()
                |> decode_body
       case result do
         {:ok, ast, rest} ->
@@ -88,13 +88,12 @@ defmodule DongraeTrader.HTTP do
     def decode_status_line(state) do
       case state do
         {:ok, acc, input} ->
-          next_state = {:ok, [], input}
-                       |> decode_pattern(~r/^HTTP\/\d+\.\d+/)
-                       |> decode_pattern(~r/^ /)
-                       |> decode_pattern(~r/^\d+/)
-                       |> decode_pattern(~r/^ /)
-                       |> decode_pattern(~r/^[^\r]+/)
-                       |> decode_pattern(~r/^\r\n/)
+          next_state = sequence([regex(~r/^HTTP\/\d+\.\d+/),
+                                 regex(~r/^ /),
+                                 regex(~r/^\d+/),
+                                 regex(~r/^ /),
+                                 regex(~r/^[^\r]+/),
+                                 regex(~r/^\r\n/)]).({:ok, [], input})
           case next_state do
             {:ok, [_, r, _, c, _, v], rest} ->
               status_line = {Version.from_string(v), String.to_integer(c), r}
@@ -123,11 +122,10 @@ defmodule DongraeTrader.HTTP do
     def decode_header(state) do
       case state do
         {:ok, acc, input} ->
-          next_state = {:ok, [], input}
-                       |> decode_pattern(~r/^[^:]+/)
-                       |> decode_pattern(~r/^:\s+/)
-                       |> decode_pattern(~r/^[^\r]+/)
-                       |> decode_pattern(~r/^\r\n/)
+          next_state = sequence([regex(~r/^[^:]+/),
+                                 regex(~r/^:\s+/),
+                                 regex(~r/^[^\r]+/),
+                                 regex(~r/^\r\n/)]).({:ok, [], input})
           case next_state do
             {:ok, [_, value, _, name], rest} ->
               {:ok, [{name |> Header.Name.from_string, value}|acc], rest}
@@ -153,20 +151,35 @@ defmodule DongraeTrader.HTTP do
       end
     end
 
-    def decode_pattern(state, regex) do
+    def regex(regex) do
+      fn {:ok, acc, input} ->
+        case Regex.run(regex, input, return: :index) do
+          [{s, l}] ->
+            token = binary_part(input, s, l)
+            rest = binary_part(input, s + l, byte_size(input) - (s + l))
+            {:ok, [token|acc], rest}
+          nil ->
+            reason = case input do
+                       "" -> :unexpected_end_of_input
+                       _ -> :unexpected_input
+                     end
+            {:error, reason}
+        end
+      end
+    end
+
+    def sequence(exprs) do
+      fn state ->
+        Enum.reduce(exprs, state, &sequence_reducer/2)
+      end
+    end
+
+    defp sequence_reducer(expr, state) do
       case state do
-        {:ok, acc, input} ->
-          case Regex.run(regex, input, return: :index) do
-            [{s, l}] ->
-              token = binary_part(input, s, l)
-              rest = binary_part(input, s + l, byte_size(input) - (s + l))
-              {:ok, [token|acc], rest}
-            nil ->
-              reason = case input do
-                         "" -> :unexpected_end_of_input
-                         _ -> :unexpected_input
-                       end
-              {:error, reason}
+        {:ok, _, _} ->
+          case expr.(state) do
+            {:ok, _acc, _rest} = result -> result
+            {:error, _} = error -> error
           end
         {:error, _} = error -> error
       end
