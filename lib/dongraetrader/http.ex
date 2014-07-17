@@ -108,7 +108,7 @@ defmodule DongraeTrader.HTTP do
 
     def decode_body({[headers, _status_line]=acc, input}) do
       length = Keyword.get(headers, :content_length, "0") |> String.to_integer
-      chunk(length).({acc, input})
+      bytes(length).({acc, input})
     end
   end
 

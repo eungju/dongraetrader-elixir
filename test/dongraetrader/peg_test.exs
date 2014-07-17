@@ -16,13 +16,13 @@ defmodule DongraeTrader.PEGTest do
     assert {:error, :unexpected_input} == PEG.regex(~r/\d+/).({[], "OK"})
   end
 
-  test "chunk success" do
-    assert {:ok, {["012"], "3"}} == PEG.chunk(3).({[], "0123"})
-    assert {:ok, {["가"], "나다"}} == PEG.chunk(3).({[], "가나다"})
+  test "bytes success" do
+    assert {:ok, {["012"], "3"}} == PEG.bytes(3).({[], "0123"})
+    assert {:ok, {["가"], "나다"}} == PEG.bytes(3).({[], "가나다"})
   end
 
-  test "chunk failure, due to unexpected end of input" do
-    assert {:error, :unexpected_end_of_input} == PEG.chunk(5).({[], "0123"})
+  test "bytes failure, due to unexpected end of input" do
+    assert {:error, :unexpected_end_of_input} == PEG.bytes(5).({[], "0123"})
   end
 
   test "action should be executed if the result is a success" do
