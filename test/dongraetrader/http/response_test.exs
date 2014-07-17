@@ -16,7 +16,7 @@ defmodule DongraeTrader.HTTP.ResponseTest do
 
   test "decode status line" do
     {:ok, [actual], <<>>} = HTTP.Response.decode_status_line({:ok, [], "HTTP/1.1 200 OK\r\n"})
-    assert actual == {:http_1_1, 200, "OK"}
+    assert {:http_1_1, 200, "OK"} == actual
   end
 
   test "decode header" do

@@ -17,14 +17,16 @@ defmodule DongraeTrader.HTTP do
     end
   end
 
-  defmodule HeaderName do
-    def to_string(name) do
-      name |> Atom.to_string
-      |> String.split("_") |> Enum.map_join("-", &String.capitalize/1)
-    end
+  defmodule Header do
+    defmodule Name do
+      def to_string(name) do
+        name |> Atom.to_string
+        |> String.split("_") |> Enum.map_join("-", &String.capitalize/1)
+      end
 
-    def from_string(s) do
-      s |> String.downcase |> String.replace("-", "_") |> String.to_atom
+      def from_string(s) do
+        s |> String.downcase |> String.replace("-", "_") |> String.to_atom
+      end
     end
   end
 
@@ -50,7 +52,9 @@ defmodule DongraeTrader.HTTP do
     end
 
     def encode_request_line(method, uri, version) do
-      [Method.to_string(method), " ", uri, " ", Version.to_string(version), "\r\n"]
+      [Method.to_string(method),
+       " ", uri,
+       " ", Version.to_string(version), "\r\n"]
     end
 
     def encode_headers(headers) do
@@ -58,7 +62,7 @@ defmodule DongraeTrader.HTTP do
     end
 
     def encode_header({name, value}) do
-      [HeaderName.to_string(name), ": ", to_string(value), "\r\n"]
+      [Header.Name.to_string(name), ": ", to_string(value), "\r\n"]
     end
   end
 
@@ -66,10 +70,11 @@ defmodule DongraeTrader.HTTP do
     defstruct version: nil, code: nil, reason: nil, headers: nil, body: nil
 
     def decode(input) do
-      result = {:ok, [], input} |> decode_status_line
-                                |> decode_headers
-                                |> decode_pattern(~r/^\r\n/)
-                                |> decode_body
+      result = {:ok, [], input}
+               |> decode_status_line
+               |> decode_headers
+               |> decode_pattern(~r/^\r\n/)
+               |> decode_body
       case result do
         {:ok, ast, rest} ->
           [body, _, headers, status_line] = ast
@@ -92,7 +97,8 @@ defmodule DongraeTrader.HTTP do
                        |> decode_pattern(~r/^\r\n/)
           case next_state do
             {:ok, [_, r, _, c, _, v], rest} ->
-              {:ok, [{v |> Version.from_string, String.to_integer(c), r}|acc], rest}
+              status_line = {Version.from_string(v), String.to_integer(c), r}
+              {:ok, [status_line|acc], rest}
             {:error, _} = error -> error
            end
         {:error, _} = error -> error
@@ -108,7 +114,8 @@ defmodule DongraeTrader.HTTP do
 
     def decode_headers({:ok, acc, input}, headers) do
       case decode_header({:ok, headers, input}) do
-        {:ok, more_headers, rest} -> decode_headers({:ok, acc, rest}, more_headers)
+        {:ok, more_headers, rest} ->
+          decode_headers({:ok, acc, rest}, more_headers)
         {:error, _} -> {:ok, [Enum.reverse(headers)|acc], input}
       end
     end
@@ -123,7 +130,7 @@ defmodule DongraeTrader.HTTP do
                        |> decode_pattern(~r/^\r\n/)
           case next_state do
             {:ok, [_, value, _, name], rest} ->
-              {:ok, [{name |> HeaderName.from_string, value}|acc], rest}
+              {:ok, [{name |> Header.Name.from_string, value}|acc], rest}
             {:error, _} = error -> error
            end
         {:error, _} = error -> error
