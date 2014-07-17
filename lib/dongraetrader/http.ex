@@ -71,51 +71,39 @@ defmodule DongraeTrader.HTTP do
     import DongraeTrader.PEG
 
     def decode(input) do
-      result = sequence([&decode_status_line/1,
-                         &decode_headers/1,
-                         regex(~r/^\r\n/, &ignore/2),
-                         &decode_body/1]).({[], input})
-      case result do
-        {:ok, {acc, rest}} ->
-          [body, headers, status_line] = acc
-          {version, code, reason} = status_line
-          {:ok, %Response{version: version, code: code, reason: reason,
-                          headers: headers, body: body}, rest}
-        {:error, _} = error -> error
+      action = fn [body, headers, {version, code, reason}], [] ->
+                 %Response{version: version, code: code, reason: reason,
+                           headers: headers, body: body}
       end
+      sequence([&decode_status_line/1,
+                &decode_headers/1,
+                regex(~r/^\r\n/, &ignore/2),
+                &decode_body/1], action).({[], input})
     end
 
     def decode_status_line({acc, input}) do
-      result = sequence([regex(~r/^HTTP\/\d+\.\d+/),
-                         regex(~r/^ /, &ignore/2),
-                         regex(~r/^\d+/),
-                         regex(~r/^ /, &ignore/2),
-                         regex(~r/^[^\r]+/),
-                         regex(~r/^\r\n/, &ignore/2)]).({[], input})
-      case result do
-        {:ok, {[r, c, v], rest}} ->
-          status_line = {Version.from_string(v), String.to_integer(c), r}
-          {:ok, {[status_line|acc], rest}}
-        {:error, _} = error -> error
-      end
+      action = transform_and_cons(fn [r, c, v] -> {Version.from_string(v), String.to_integer(c), r} end)
+      sequence([regex(~r/^HTTP\/\d+\.\d+/),
+                regex(~r/^ /, &ignore/2),
+                regex(~r/^\d+/),
+                regex(~r/^ /, &ignore/2),
+                regex(~r/^[^\r]+/),
+                regex(~r/^\r\n/, &ignore/2)], action).({acc, input})
     end
 
     def decode_headers({acc, input}) do
-      case zero_or_more(&decode_header/1).({[], input}) do
-        {:ok, {headers, rest}} -> {:ok, {[Enum.reverse(headers)|acc], rest}}
-      end
+      action = transform_and_cons(&Enum.reverse/1)
+      zero_or_more(&decode_header/1, action).({acc, input})
     end
 
     def decode_header({acc, input}) do
-      result = sequence([regex(~r/^[^:]+/),
-                         regex(~r/^:\s+/, &ignore/2),
-                         regex(~r/^[^\r]+/),
-                         regex(~r/^\r\n/, &ignore/2)]).({[], input})
-      case result do
-        {:ok, {[value, name], rest}} ->
-          {:ok, {[{name |> Header.Name.from_string, value}|acc], rest}}
-        {:error, _} = error -> error
-      end
+      action = transform_and_cons(fn [value, name] ->
+                                    {name |> Header.Name.from_string, value}
+                                  end)
+      sequence([regex(~r/^[^:]+/),
+                regex(~r/^:\s+/, &ignore/2),
+                regex(~r/^[^\r]+/),
+                regex(~r/^\r\n/, &ignore/2)], action).({acc, input})
     end
 
     def decode_body({[headers, _status_line]=acc, input}) do
@@ -157,7 +145,7 @@ defmodule DongraeTrader.HTTP do
         {:ok, packet} ->
           recv_buf = recv_buf <> packet
           case Response.decode(recv_buf) do
-            {:ok, response, <<>>} -> {:ok, response}
+            {:ok, {response, <<>>}} -> {:ok, response}
             {:error, :unexpected_end_of_input} -> _recv_response(conn, recv_buf)
             {:error, _} = error -> error
             _ -> {:error, :unknown}

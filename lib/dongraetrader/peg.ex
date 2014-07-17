@@ -1,4 +1,20 @@
 defmodule DongraeTrader.PEG do
+  #Actions
+
+  def cons(e, acc) do
+    [e|acc]
+  end
+
+  def transform_and_cons(f) do
+    fn e, acc -> [f.(e)|acc] end
+  end
+
+  def ignore(_, acc) do
+    acc
+  end
+
+  #Terminals
+
   def chunk(length, action \\ &cons/2) do
     fn {acc, input} ->
       input_length = byte_size(input)
@@ -28,37 +44,32 @@ defmodule DongraeTrader.PEG do
     end
   end
 
-  def cons(terminal, acc) do
-    [terminal|acc]
+  #Operators
+
+  def sequence(exprs, action \\ &cons/2) do
+    fn {acc, input} -> sequence_loop(exprs, action, {[], input}, acc) end
   end
 
-  def ignore(_terminal, acc) do
-    acc
-  end
-
-  def sequence(exprs) do
-    fn state -> sequence_loop(exprs, state) end
-  end
-
-  defp sequence_loop(exprs, state) do
+  defp sequence_loop(exprs, action, {lacc, input}=state, acc) do
     case exprs do
-      [] -> {:ok, state}
+      [] ->
+        {:ok, {action.(lacc, acc), input}}
       [expr|expr_rest] ->
         case expr.(state) do
-          {:ok, result_state} -> sequence_loop(expr_rest, result_state)
+          {:ok, result_state} -> sequence_loop(expr_rest, action, result_state, acc)
           {:error, _} = error -> error
         end
     end
   end
 
-  def zero_or_more(expr) do
-    fn state -> zero_or_more_loop(expr, state) end
+  def zero_or_more(expr, action \\ &cons/2) do
+    fn {acc, input} -> zero_or_more_loop(expr, action, {[], input}, acc) end
   end
 
-  defp zero_or_more_loop(expr, state) do
+  defp zero_or_more_loop(expr, action, {lacc, input}=state, acc) do
     case expr.(state) do
-      {:ok, result_state} -> zero_or_more_loop(expr, result_state)
-      {:error, _} -> {:ok, state}
+      {:ok, result_state} -> zero_or_more_loop(expr, action, result_state, acc)
+      {:error, _} -> {:ok, {action.(lacc, acc), input}}
     end
   end
 end
