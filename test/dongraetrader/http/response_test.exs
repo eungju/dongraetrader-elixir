@@ -1,19 +1,6 @@
 defmodule DongraeTrader.HTTP.ResponseTest do
   use ExUnit.Case
   alias DongraeTrader.HTTP, as: HTTP
-  alias DongraeTrader.PEG, as: PEG
-
-  test "regex success" do
-    assert {:ok, {["200"], " OK\r\n"}} == PEG.regex(~r/^\d+/).({[], "200 OK\r\n"})
-  end
-
-  test "regex failure, due to unexpected end of input" do
-    assert {:error, :unexpected_end_of_input} == PEG.regex(~r/^\d+/).({[], ""})
-  end
-
-  test "regex failure, due to unexpected input" do
-    assert {:error, :unexpected_input} == PEG.regex(~r/^\d+/).({[], "OK"})
-  end
 
   test "decode status line" do
     {:ok, {[actual], <<>>}} = HTTP.Response.decode_status_line({[], "HTTP/1.1 200 OK\r\n"})

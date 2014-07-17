@@ -73,11 +73,11 @@ defmodule DongraeTrader.HTTP do
     def decode(input) do
       result = sequence([&decode_status_line/1,
                          &decode_headers/1,
-                         regex(~r/^\r\n/),
+                         regex(~r/^\r\n/, &ignore/2),
                          &decode_body/1]).({[], input})
       case result do
         {:ok, {acc, rest}} ->
-          [body, _, headers, status_line] = acc
+          [body, headers, status_line] = acc
           {version, code, reason} = status_line
           {:ok, %Response{version: version, code: code, reason: reason,
                           headers: headers, body: body}, rest}
@@ -87,13 +87,13 @@ defmodule DongraeTrader.HTTP do
 
     def decode_status_line({acc, input}) do
       result = sequence([regex(~r/^HTTP\/\d+\.\d+/),
-                         regex(~r/^ /),
+                         regex(~r/^ /, &ignore/2),
                          regex(~r/^\d+/),
-                         regex(~r/^ /),
+                         regex(~r/^ /, &ignore/2),
                          regex(~r/^[^\r]+/),
-                         regex(~r/^\r\n/)]).({[], input})
+                         regex(~r/^\r\n/, &ignore/2)]).({[], input})
       case result do
-        {:ok, {[_, r, _, c, _, v], rest}} ->
+        {:ok, {[r, c, v], rest}} ->
           status_line = {Version.from_string(v), String.to_integer(c), r}
           {:ok, {[status_line|acc], rest}}
         {:error, _} = error -> error
@@ -108,26 +108,19 @@ defmodule DongraeTrader.HTTP do
 
     def decode_header({acc, input}) do
       result = sequence([regex(~r/^[^:]+/),
-                         regex(~r/^:\s+/),
+                         regex(~r/^:\s+/, &ignore/2),
                          regex(~r/^[^\r]+/),
-                         regex(~r/^\r\n/)]).({[], input})
+                         regex(~r/^\r\n/, &ignore/2)]).({[], input})
       case result do
-        {:ok, {[_, value, _, name], rest}} ->
+        {:ok, {[value, name], rest}} ->
           {:ok, {[{name |> Header.Name.from_string, value}|acc], rest}}
         {:error, _} = error -> error
       end
     end
 
-    def decode_body({[_crlf, headers, _status_line]=acc, input}) do
-      body_length = Keyword.get(headers, :content_length, "0")
-                    |> String.to_integer
-      input_length = byte_size(input)
-      if body_length > input_length  do
-        {:error, :unexpected_end_of_input}
-      else
-        {body, rest} = String.split_at(input, body_length)
-        {:ok, {[body|acc], rest}}
-      end
+    def decode_body({[headers, _status_line]=acc, input}) do
+      length = Keyword.get(headers, :content_length, "0") |> String.to_integer
+      chunk(length).({acc, input})
     end
   end
 

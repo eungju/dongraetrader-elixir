@@ -1,11 +1,23 @@
 defmodule DongraeTrader.PEG do
-  def regex(regex) do
+  def chunk(length, action \\ &cons/2) do
+    fn {acc, input} ->
+      input_length = byte_size(input)
+      if length > input_length  do
+        {:error, :unexpected_end_of_input}
+      else
+        {chunk, rest} = String.split_at(input, length)
+        {:ok, {action.(chunk, acc), rest}}
+      end
+    end
+  end
+
+  def regex(regex, action \\ &cons/2) do
     fn {acc, input} ->
       case Regex.run(regex, input, return: :index) do
         [{s, l}] ->
-          token = binary_part(input, s, l)
+          terminal = binary_part(input, s, l)
           rest = binary_part(input, s + l, byte_size(input) - (s + l))
-          {:ok, {[token|acc], rest}}
+          {:ok, {action.(terminal, acc), rest}}
         nil ->
           reason = case input do
                      "" -> :unexpected_end_of_input
@@ -14,6 +26,14 @@ defmodule DongraeTrader.PEG do
           {:error, reason}
       end
     end
+  end
+
+  def cons(terminal, acc) do
+    [terminal|acc]
+  end
+
+  def ignore(_terminal, acc) do
+    acc
   end
 
   def sequence(exprs) do
