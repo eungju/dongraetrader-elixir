@@ -15,13 +15,14 @@ defmodule DongraeTrader.PEG do
 
   #Terminals
 
-  def chunk(length, action \\ &cons/2) do
+  def chunk(required, action \\ &cons/2) do
     fn {acc, input} ->
-      input_length = byte_size(input)
-      if length > input_length  do
+      available = byte_size(input)
+      if required > available  do
         {:error, :unexpected_end_of_input}
       else
-        {chunk, rest} = String.split_at(input, length)
+        chunk = binary_part(input, 0, required)
+        rest = binary_part(input, required, available - required)
         {:ok, {action.(chunk, acc), rest}}
       end
     end
