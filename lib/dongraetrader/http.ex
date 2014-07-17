@@ -70,11 +70,10 @@ defmodule DongraeTrader.HTTP do
     defstruct version: nil, code: nil, reason: nil, headers: nil, body: nil
 
     def decode(input) do
-      result = {:ok, [], input}
-               |> decode_status_line
-               |> decode_headers
-               |> regex(~r/^\r\n/).()
-               |> decode_body
+      result = sequence([&decode_status_line/1,
+                         &decode_headers/1,
+                         regex(~r/^\r\n/),
+                         &decode_body/1]).({:ok, [], input})
       case result do
         {:ok, ast, rest} ->
           [body, _, headers, status_line] = ast
@@ -85,69 +84,48 @@ defmodule DongraeTrader.HTTP do
       end
     end
 
-    def decode_status_line(state) do
-      case state do
-        {:ok, acc, input} ->
-          next_state = sequence([regex(~r/^HTTP\/\d+\.\d+/),
-                                 regex(~r/^ /),
-                                 regex(~r/^\d+/),
-                                 regex(~r/^ /),
-                                 regex(~r/^[^\r]+/),
-                                 regex(~r/^\r\n/)]).({:ok, [], input})
-          case next_state do
-            {:ok, [_, r, _, c, _, v], rest} ->
-              status_line = {Version.from_string(v), String.to_integer(c), r}
-              {:ok, [status_line|acc], rest}
-            {:error, _} = error -> error
-           end
+    def decode_status_line({:ok, acc, input}) do
+      next_state = sequence([regex(~r/^HTTP\/\d+\.\d+/),
+                             regex(~r/^ /),
+                             regex(~r/^\d+/),
+                             regex(~r/^ /),
+                             regex(~r/^[^\r]+/),
+                             regex(~r/^\r\n/)]).({:ok, [], input})
+      case next_state do
+        {:ok, [_, r, _, c, _, v], rest} ->
+          status_line = {Version.from_string(v), String.to_integer(c), r}
+          {:ok, [status_line|acc], rest}
         {:error, _} = error -> error
       end
     end
 
-    def decode_headers(state) do
-      case state do
-        {:ok, acc, input} -> decode_headers({:ok, acc, input}, [])
+    def decode_headers({:ok, acc, input}) do
+      case zero_or_more(&decode_header/1).({:ok, [], input}) do
+        {:ok, headers, rest} -> {:ok, [Enum.reverse(headers)|acc], rest}
+      end
+    end
+
+    def decode_header({:ok, acc, input}) do
+      next_state = sequence([regex(~r/^[^:]+/),
+                             regex(~r/^:\s+/),
+                             regex(~r/^[^\r]+/),
+                             regex(~r/^\r\n/)]).({:ok, [], input})
+      case next_state do
+        {:ok, [_, value, _, name], rest} ->
+          {:ok, [{name |> Header.Name.from_string, value}|acc], rest}
         {:error, _} = error -> error
       end
     end
 
-    def decode_headers({:ok, acc, input}, headers) do
-      case decode_header({:ok, headers, input}) do
-        {:ok, more_headers, rest} ->
-          decode_headers({:ok, acc, rest}, more_headers)
-        {:error, _} -> {:ok, [Enum.reverse(headers)|acc], input}
-      end
-    end
-
-    def decode_header(state) do
-      case state do
-        {:ok, acc, input} ->
-          next_state = sequence([regex(~r/^[^:]+/),
-                                 regex(~r/^:\s+/),
-                                 regex(~r/^[^\r]+/),
-                                 regex(~r/^\r\n/)]).({:ok, [], input})
-          case next_state do
-            {:ok, [_, value, _, name], rest} ->
-              {:ok, [{name |> Header.Name.from_string, value}|acc], rest}
-            {:error, _} = error -> error
-           end
-        {:error, _} = error -> error
-      end
-    end
-
-    def decode_body(state) do
-      case state do
-        {:ok, [_crlf, headers, _status_line]=acc, input} ->
-          body_length = Keyword.get(headers, :content_length, "0")
-                        |> String.to_integer
-          input_length = byte_size(input)
-          if body_length > input_length  do
-            {:error, :unexpected_end_of_input}
-          else
-            {body, rest} = String.split_at(input, body_length)
-            {:ok, [body|acc], rest}
-          end
-        {:error, _} = error -> error
+    def decode_body({:ok, [_crlf, headers, _status_line]=acc, input}) do
+      body_length = Keyword.get(headers, :content_length, "0")
+                    |> String.to_integer
+      input_length = byte_size(input)
+      if body_length > input_length  do
+        {:error, :unexpected_end_of_input}
+      else
+        {body, rest} = String.split_at(input, body_length)
+        {:ok, [body|acc], rest}
       end
     end
 
@@ -169,19 +147,28 @@ defmodule DongraeTrader.HTTP do
     end
 
     def sequence(exprs) do
-      fn state ->
-        Enum.reduce(exprs, state, &sequence_reducer/2)
+      fn state -> sequence_loop(exprs, state) end
+    end
+
+    defp sequence_loop(exprs, state) do
+      case exprs do
+        [] -> state
+        [expr|expr_rest] ->
+          case expr.(state) do
+            {:ok, _, _} = result -> sequence_loop(expr_rest, result)
+            {:error, _} = error -> error
+          end
       end
     end
 
-    defp sequence_reducer(expr, state) do
-      case state do
-        {:ok, _, _} ->
-          case expr.(state) do
-            {:ok, _acc, _rest} = result -> result
-            {:error, _} = error -> error
-          end
-        {:error, _} = error -> error
+    def zero_or_more(expr) do
+      fn state -> zero_or_more_loop(expr, state) end
+    end
+
+    defp zero_or_more_loop(expr, state) do
+      case expr.(state) do
+        {:ok, _, _} = result -> zero_or_more_loop(expr, result)
+        {:error, _} -> state
       end
     end
   end
