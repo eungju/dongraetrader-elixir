@@ -73,9 +73,9 @@ defmodule DongraeTrader.HTTP do
       result = sequence([&decode_status_line/1,
                          &decode_headers/1,
                          regex(~r/^\r\n/),
-                         &decode_body/1]).({:ok, [], input})
+                         &decode_body/1]).({[], input})
       case result do
-        {:ok, ast, rest} ->
+        {:ok, {ast, rest}} ->
           [body, _, headers, status_line] = ast
           {version, code, reason} = status_line
           {:ok, %Response{version: version, code: code, reason: reason,
@@ -84,40 +84,40 @@ defmodule DongraeTrader.HTTP do
       end
     end
 
-    def decode_status_line({:ok, acc, input}) do
-      next_state = sequence([regex(~r/^HTTP\/\d+\.\d+/),
-                             regex(~r/^ /),
-                             regex(~r/^\d+/),
-                             regex(~r/^ /),
-                             regex(~r/^[^\r]+/),
-                             regex(~r/^\r\n/)]).({:ok, [], input})
-      case next_state do
-        {:ok, [_, r, _, c, _, v], rest} ->
+    def decode_status_line({acc, input}) do
+      result = sequence([regex(~r/^HTTP\/\d+\.\d+/),
+                         regex(~r/^ /),
+                         regex(~r/^\d+/),
+                         regex(~r/^ /),
+                         regex(~r/^[^\r]+/),
+                         regex(~r/^\r\n/)]).({[], input})
+      case result do
+        {:ok, {[_, r, _, c, _, v], rest}} ->
           status_line = {Version.from_string(v), String.to_integer(c), r}
-          {:ok, [status_line|acc], rest}
+          {:ok, {[status_line|acc], rest}}
         {:error, _} = error -> error
       end
     end
 
-    def decode_headers({:ok, acc, input}) do
-      case zero_or_more(&decode_header/1).({:ok, [], input}) do
-        {:ok, headers, rest} -> {:ok, [Enum.reverse(headers)|acc], rest}
+    def decode_headers({acc, input}) do
+      case zero_or_more(&decode_header/1).({[], input}) do
+        {:ok, {headers, rest}} -> {:ok, {[Enum.reverse(headers)|acc], rest}}
       end
     end
 
-    def decode_header({:ok, acc, input}) do
-      next_state = sequence([regex(~r/^[^:]+/),
-                             regex(~r/^:\s+/),
-                             regex(~r/^[^\r]+/),
-                             regex(~r/^\r\n/)]).({:ok, [], input})
-      case next_state do
-        {:ok, [_, value, _, name], rest} ->
-          {:ok, [{name |> Header.Name.from_string, value}|acc], rest}
+    def decode_header({acc, input}) do
+      result = sequence([regex(~r/^[^:]+/),
+                         regex(~r/^:\s+/),
+                         regex(~r/^[^\r]+/),
+                         regex(~r/^\r\n/)]).({[], input})
+      case result do
+        {:ok, {[_, value, _, name], rest}} ->
+          {:ok, {[{name |> Header.Name.from_string, value}|acc], rest}}
         {:error, _} = error -> error
       end
     end
 
-    def decode_body({:ok, [_crlf, headers, _status_line]=acc, input}) do
+    def decode_body({[_crlf, headers, _status_line]=acc, input}) do
       body_length = Keyword.get(headers, :content_length, "0")
                     |> String.to_integer
       input_length = byte_size(input)
@@ -125,17 +125,17 @@ defmodule DongraeTrader.HTTP do
         {:error, :unexpected_end_of_input}
       else
         {body, rest} = String.split_at(input, body_length)
-        {:ok, [body|acc], rest}
+        {:ok, {[body|acc], rest}}
       end
     end
 
     def regex(regex) do
-      fn {:ok, acc, input} ->
+      fn {acc, input} ->
         case Regex.run(regex, input, return: :index) do
           [{s, l}] ->
             token = binary_part(input, s, l)
             rest = binary_part(input, s + l, byte_size(input) - (s + l))
-            {:ok, [token|acc], rest}
+            {:ok, {[token|acc], rest}}
           nil ->
             reason = case input do
                        "" -> :unexpected_end_of_input
@@ -152,10 +152,10 @@ defmodule DongraeTrader.HTTP do
 
     defp sequence_loop(exprs, state) do
       case exprs do
-        [] -> state
+        [] -> {:ok, state}
         [expr|expr_rest] ->
           case expr.(state) do
-            {:ok, _, _} = result -> sequence_loop(expr_rest, result)
+            {:ok, result_state} -> sequence_loop(expr_rest, result_state)
             {:error, _} = error -> error
           end
       end
@@ -167,8 +167,8 @@ defmodule DongraeTrader.HTTP do
 
     defp zero_or_more_loop(expr, state) do
       case expr.(state) do
-        {:ok, _, _} = result -> zero_or_more_loop(expr, result)
-        {:error, _} -> state
+        {:ok, result_state} -> zero_or_more_loop(expr, result_state)
+        {:error, _} -> {:ok, state}
       end
     end
   end

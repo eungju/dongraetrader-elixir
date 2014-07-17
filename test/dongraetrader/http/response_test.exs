@@ -3,28 +3,28 @@ defmodule DongraeTrader.HTTP.ResponseTest do
   alias DongraeTrader.HTTP, as: HTTP
 
   test "regex success" do
-    assert {:ok, ["200"], " OK\r\n"} == HTTP.Response.regex(~r/^\d+/).({:ok, [], "200 OK\r\n"})
+    assert {:ok, {["200"], " OK\r\n"}} == HTTP.Response.regex(~r/^\d+/).({[], "200 OK\r\n"})
   end
 
   test "regex failure, due to unexpected end of input" do
-    assert {:error, :unexpected_end_of_input} == HTTP.Response.regex(~r/^\d+/).({:ok, [], ""})
+    assert {:error, :unexpected_end_of_input} == HTTP.Response.regex(~r/^\d+/).({[], ""})
   end
 
   test "regex failure, due to unexpected input" do
-    assert {:error, :unexpected_input} == HTTP.Response.regex(~r/^\d+/).({:ok, [], "OK"})
+    assert {:error, :unexpected_input} == HTTP.Response.regex(~r/^\d+/).({[], "OK"})
   end
 
   test "decode status line" do
-    {:ok, [actual], <<>>} = HTTP.Response.decode_status_line({:ok, [], "HTTP/1.1 200 OK\r\n"})
+    {:ok, {[actual], <<>>}} = HTTP.Response.decode_status_line({[], "HTTP/1.1 200 OK\r\n"})
     assert {:http_1_1, 200, "OK"} == actual
   end
 
   test "decode header" do
-    assert {:ok, [{:content_length, "42"}], <<>>} == HTTP.Response.decode_header({:ok, [], "Content-Length: 42\r\n"})
+    assert {:ok, {[{:content_length, "42"}], <<>>}} == HTTP.Response.decode_header({[], "Content-Length: 42\r\n"})
   end
 
   test "decode headers" do
-    assert {:ok, [[{:content_length, "42"}, {:content_type, "text/html"}]], <<>>} == HTTP.Response.decode_headers({:ok, [], "Content-Length: 42\r\nContent-Type: text/html\r\n"})
+    assert {:ok, {[[{:content_length, "42"}, {:content_type, "text/html"}]], <<>>}} == HTTP.Response.decode_headers({[], "Content-Length: 42\r\nContent-Type: text/html\r\n"})
   end
 
   test "decode response" do
