@@ -4,6 +4,8 @@ defmodule DongraeTrader.PEGTest do
 
   test "regex success" do
     assert {:ok, {["200"], " OK\r\n"}} == PEG.regex(~r/\d+/).({[], "200 OK\r\n"})
+    assert {:ok, {["가"], "나다"}} == PEG.regex(~r/가/).({[], "가나다"})
+    assert {:ok, {["가"], "나다"}} == PEG.regex(~r/\w/u).({[], "가나다"})
   end
 
   test "regex failure, due to unexpected end of input" do
