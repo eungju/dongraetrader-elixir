@@ -77,18 +77,18 @@ defmodule DongraeTrader.HTTP do
       end
       sequence([&decode_status_line/1,
                 &decode_headers/1,
-                regex(~r/^\r\n/, &ignore/2),
+                regex(~r/\r\n/, &ignore/2),
                 &decode_body/1], action).({[], input})
     end
 
     def decode_status_line({acc, input}) do
       action = transform_and_cons(fn [r, c, v] -> {Version.from_string(v), String.to_integer(c), r} end)
-      sequence([regex(~r/^HTTP\/\d+\.\d+/),
-                regex(~r/^ /, &ignore/2),
-                regex(~r/^\d+/),
-                regex(~r/^ /, &ignore/2),
-                regex(~r/^[^\r]+/),
-                regex(~r/^\r\n/, &ignore/2)], action).({acc, input})
+      sequence([regex(~r/HTTP\/\d+\.\d+/),
+                regex(~r/ /, &ignore/2),
+                regex(~r/\d+/),
+                regex(~r/ /, &ignore/2),
+                regex(~r/[^\r]+/),
+                regex(~r/\r\n/, &ignore/2)], action).({acc, input})
     end
 
     def decode_headers({acc, input}) do
@@ -100,10 +100,10 @@ defmodule DongraeTrader.HTTP do
       action = transform_and_cons(fn [value, name] ->
                                     {name |> Header.Name.from_string, value}
                                   end)
-      sequence([regex(~r/^[^:]+/),
-                regex(~r/^:\s+/, &ignore/2),
-                regex(~r/^[^\r]+/),
-                regex(~r/^\r\n/, &ignore/2)], action).({acc, input})
+      sequence([regex(~r/[^:]+/),
+                regex(~r/:\s+/, &ignore/2),
+                regex(~r/[^\r]+/),
+                regex(~r/\r\n/, &ignore/2)], action).({acc, input})
     end
 
     def decode_body({[headers, _status_line]=acc, input}) do

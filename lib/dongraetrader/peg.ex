@@ -30,11 +30,11 @@ defmodule DongraeTrader.PEG do
   def regex(regex, action \\ &cons/2) do
     fn {acc, input} ->
       case Regex.run(regex, input, return: :index) do
-        [{s, l}] ->
-          terminal = binary_part(input, s, l)
-          rest = binary_part(input, s + l, byte_size(input) - (s + l))
+        [{0, l}] ->
+          terminal = binary_part(input, 0, l)
+          rest = binary_part(input, l, byte_size(input) - l)
           {:ok, {action.(terminal, acc), rest}}
-        nil ->
+        _ ->
           reason = case input do
                      "" -> :unexpected_end_of_input
                      _ -> :unexpected_input
