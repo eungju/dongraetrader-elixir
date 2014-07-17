@@ -32,4 +32,25 @@ defmodule DongraeTrader.PEGTest do
   test "action should not be executed if the result is a failure" do
     assert {:error, :unexpected_input} == PEG.regex(~r/OK/, &PEG.ignore/2).({[:keep], "ERROR."})
   end
+
+  test "sequence success" do
+    a = PEG.regex(~r/A/)
+    b = PEG.regex(~r/B/)
+    assert {:ok, {[["B", "A"]], "C"}} == PEG.sequence([a, b]).({[], "ABC"})
+  end
+
+  test "sequence failure" do
+    a = PEG.regex(~r/A/)
+    b = PEG.regex(~r/B/)
+    assert {:error, :unexpected_end_of_input} == PEG.sequence([a, b]).({[], "A"})
+    assert {:error, :unexpected_input} == PEG.sequence([a, b]).({[], "AC"})
+  end
+
+  test "zero_or_more success" do
+    a = PEG.regex(~r/A/)
+    assert {:ok, {[[]], ""}} == PEG.zero_or_more(a).({[], ""})
+    assert {:ok, {[[]], "B"}} == PEG.zero_or_more(a).({[], "B"})
+    assert {:ok, {[["A"]], "B"}} == PEG.zero_or_more(a).({[], "AB"})
+    assert {:ok, {[["A", "A"]], "B"}} == PEG.zero_or_more(a).({[], "AAB"})
+  end
 end
