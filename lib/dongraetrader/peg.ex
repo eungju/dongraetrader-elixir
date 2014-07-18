@@ -15,17 +15,8 @@ defmodule DongraeTrader.PEG do
 
   #Terminals
 
-  def bytes(length, action \\ &cons/2) do
-    fn {acc, input} ->
-      available = byte_size(input)
-      if length > available  do
-        {:error, :unexpected_end_of_input}
-      else
-        terminal = binary_part(input, 0, length)
-        rest = binary_part(input, length, available - length)
-        {:ok, {action.(terminal, acc), rest}}
-      end
-    end
+  def empty() do
+    fn {acc, input} -> {:ok, {[""|acc], input}} end
   end
 
   def binary(s, action \\ &cons/2) do
@@ -58,17 +49,27 @@ defmodule DongraeTrader.PEG do
           rest = binary_part(input, l, byte_size(input) - l)
           {:ok, {action.(terminal, acc), rest}}
         _ ->
-          reason = case input do
-                     "" -> :unexpected_end_of_input
-                     _ -> :unexpected_input
+          reason = if input === "" do
+                     :unexpected_end_of_input
+                   else
+                     :unexpected_input
                    end
           {:error, reason}
       end
     end
   end
 
-  def empty() do
-    fn {acc, input} -> {:ok, {[""|acc], input}} end
+  def bytes(length, action \\ &cons/2) do
+    fn {acc, input} ->
+      available = byte_size(input)
+      if length > available  do
+        {:error, :unexpected_end_of_input}
+      else
+        terminal = binary_part(input, 0, length)
+        rest = binary_part(input, length, available - length)
+        {:ok, {action.(terminal, acc), rest}}
+      end
+    end
   end
 
   #Operators
@@ -96,7 +97,7 @@ defmodule DongraeTrader.PEG do
   defp choice_loop(exprs, action, state) do
     case exprs do
       [] ->
-        {:error, :unexpected_input}
+        {:error, :unsatisfied_choice}
       [expr|expr_rest] ->
         case expr.(state) do
           {:ok, result_state} -> {:ok, result_state}
@@ -149,7 +150,7 @@ defmodule DongraeTrader.PEG do
     fn state ->
       case expr.(state) do
         {:ok, _} -> {:ok, state}
-        {:error, _} = error -> error
+        {:error, _} -> {:error, :unsatisfied_and_predicate}
       end
     end
   end
@@ -157,7 +158,7 @@ defmodule DongraeTrader.PEG do
   def notp(expr) do
     fn state ->
       case expr.(state) do
-        {:ok, _} -> {:error, :unexpected_input}
+        {:ok, _} -> {:error, :unsatisfied_not_predicate}
         {:error, _} -> {:ok, state}
       end
     end
