@@ -21,11 +21,33 @@ defmodule DongraeTrader.PEG do
       if length > available  do
         {:error, :unexpected_end_of_input}
       else
-        chunk = binary_part(input, 0, length)
+        terminal = binary_part(input, 0, length)
         rest = binary_part(input, length, available - length)
-        {:ok, {action.(chunk, acc), rest}}
+        {:ok, {action.(terminal, acc), rest}}
       end
     end
+  end
+
+  def binary(s, action \\ &cons/2) do
+    fn {acc, input} ->
+      length = byte_size(s)
+      available = byte_size(input)
+      if length > available  do
+        {:error, :unexpected_end_of_input}
+      else
+        terminal = binary_part(input, 0, length)
+        if s === terminal do
+          rest = binary_part(input, length, available - length)
+          {:ok, {action.(terminal, acc), rest}}
+        else
+          {:error, :unexpected_input}
+        end
+      end
+    end
+  end
+
+  def string(s, action \\ &cons/2) do
+    binary(s, action)
   end
 
   def regex(regex, action \\ &cons/2) do
@@ -43,6 +65,10 @@ defmodule DongraeTrader.PEG do
           {:error, reason}
       end
     end
+  end
+
+  def empty() do
+    fn {acc, input} -> {:ok, {[""|acc], input}} end
   end
 
   #Operators
@@ -63,6 +89,22 @@ defmodule DongraeTrader.PEG do
     end
   end
 
+  def choice(exprs, action \\ &cons/2) do
+    fn state -> choice_loop(exprs, action, state) end
+  end
+
+  defp choice_loop(exprs, action, state) do
+    case exprs do
+      [] ->
+        {:error, :unexpected_input}
+      [expr|expr_rest] ->
+        case expr.(state) do
+          {:ok, result_state} -> {:ok, result_state}
+          {:error, _} -> choice_loop(expr_rest, action, state)
+        end
+    end
+  end
+
   def zero_or_more(expr, action \\ &cons/2) do
     fn {acc, input} -> zero_or_more_loop(expr, action, {[], input}, acc) end
   end
@@ -71,6 +113,35 @@ defmodule DongraeTrader.PEG do
     case expr.(state) do
       {:ok, result_state} -> zero_or_more_loop(expr, action, result_state, acc)
       {:error, _} -> {:ok, {action.(lacc, acc), input}}
+    end
+  end
+
+  def one_or_more(expr, action \\ &cons/2) do
+    fn {acc, input} -> one_or_more_mandatory(expr, action, {[], input}, acc) end
+  end
+
+  defp one_or_more_mandatory(expr, action, state, acc) do
+    case expr.(state) do
+      {:ok, result_state} ->
+        one_or_more_optional(expr, action, result_state, acc)
+      {:error, _} = error -> error
+    end
+  end
+
+  defp one_or_more_optional(expr, action, {lacc, input}=state, acc) do
+    case expr.(state) do
+      {:ok, result_state} ->
+        one_or_more_optional(expr, action, result_state, acc)
+      {:error, _} -> {:ok, {action.(lacc, acc), input}}
+    end
+  end
+
+  def optional(expr) do
+    fn state ->
+      case expr.(state) do
+        {:ok, result_state} -> {:ok, result_state}
+        {:error, _} -> {:ok, state}
+      end
     end
   end
 end
