@@ -96,4 +96,16 @@ defmodule DongraeTrader.PEGTest do
     assert {:ok, {[], "B"}} == PEG.optional(a).({[], "B"})
     assert {:ok, {["A"], "B"}} == PEG.optional(a).({[], "AB"})
   end
+
+  test "The and-predicate expression &e invokes the sub-expression e, and then succeeds if e succeeds and fails if e fails, but in either case never consumes any input." do
+    a = PEG.string("A")
+    assert {:ok, {[], "ABC"}} == PEG.andp(a).({[], "ABC"})
+    assert {:error, :unexpected_input} == PEG.andp(a).({[], "BC"})
+  end
+
+  test "The not-predicate expression !e succeeds if e fails and fails if e succeeds, again consuming no input in either case." do
+    a = PEG.string("A")
+    assert {:error, :unexpected_input} == PEG.notp(a).({[], "ABC"})
+    assert {:ok, {[], "BC"}} == PEG.notp(a).({[], "BC"})
+  end
 end

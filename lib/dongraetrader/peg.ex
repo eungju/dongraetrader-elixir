@@ -144,4 +144,22 @@ defmodule DongraeTrader.PEG do
       end
     end
   end
+
+  def andp(expr) do
+    fn state ->
+      case expr.(state) do
+        {:ok, _} -> {:ok, state}
+        {:error, _} = error -> error
+      end
+    end
+  end
+
+  def notp(expr) do
+    fn state ->
+      case expr.(state) do
+        {:ok, _} -> {:error, :unexpected_input}
+        {:error, _} -> {:ok, state}
+      end
+    end
+  end
 end
