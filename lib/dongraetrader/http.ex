@@ -68,47 +68,57 @@ defmodule DongraeTrader.HTTP do
 
   defmodule Response do
     defstruct version: nil, code: nil, reason: nil, headers: nil, body: nil
-    import DongraeTrader.PEG
 
-    def decode(input) do
-      action = fn [body, headers, {version, code, reason}], [] ->
-                 %Response{version: version, code: code, reason: reason,
-                           headers: headers, body: body}
+    defmodule Decoder do
+      import DongraeTrader.PEG
+
+      def decode(input) do
+        response({[], input})
       end
-      sequence([&decode_status_line/1,
-                &decode_headers/1,
-                regex(~r/\r\n/, &ignore/2),
-                &decode_body/1], action).({[], input})
-    end
 
-    def decode_status_line({acc, input}) do
-      action = transform_and_cons(fn [r, c, v] -> {Version.from_string(v), String.to_integer(c), r} end)
-      sequence([regex(~r/HTTP\/\d+\.\d+/),
-                regex(~r/ /, &ignore/2),
-                regex(~r/\d+/),
-                regex(~r/ /, &ignore/2),
-                regex(~r/[^\r]+/),
-                regex(~r/\r\n/, &ignore/2)], action).({acc, input})
-    end
+      def response({acc, input}) do
+        action = fn [body, headers, {version, code, reason}], [] ->
+                   %Response{version: version, code: code, reason: reason,
+                             headers: headers, body: body}
+        end
+        sequence([&status_line/1,
+                  &headers/1,
+                  regex(~r/\r\n/, &ignore/2),
+                  &body/1], action).({acc, input})
+      end
 
-    def decode_headers({acc, input}) do
-      action = transform_and_cons(&Enum.reverse/1)
-      zero_or_more(&decode_header/1, action).({acc, input})
-    end
+      def status_line({acc, input}) do
+        action = transform_and_cons(fn [r, c, v] ->
+                                      {Version.from_string(v),
+                                       String.to_integer(c), r}
+                                    end)
+        sequence([regex(~r/HTTP\/\d+\.\d+/),
+                  regex(~r/ /, &ignore/2),
+                  regex(~r/\d+/),
+                  regex(~r/ /, &ignore/2),
+                  regex(~r/[^\r]+/),
+                  regex(~r/\r\n/, &ignore/2)], action).({acc, input})
+      end
 
-    def decode_header({acc, input}) do
-      action = transform_and_cons(fn [value, name] ->
-                                    {name |> Header.Name.from_string, value}
-                                  end)
-      sequence([regex(~r/[^:]+/),
-                regex(~r/:\s+/, &ignore/2),
-                regex(~r/[^\r]+/),
-                regex(~r/\r\n/, &ignore/2)], action).({acc, input})
-    end
+      def headers({acc, input}) do
+        action = transform_and_cons(&Enum.reverse/1)
+        zero_or_more(&header/1, action).({acc, input})
+      end
 
-    def decode_body({[headers, _status_line]=acc, input}) do
-      length = Keyword.get(headers, :content_length, "0") |> String.to_integer
-      bytes(length).({acc, input})
+      def header({acc, input}) do
+        action = transform_and_cons(fn [value, name] ->
+                                      {name |> Header.Name.from_string, value}
+                                    end)
+        sequence([regex(~r/[^:]+/),
+                  regex(~r/:\s+/, &ignore/2),
+                  regex(~r/[^\r]+/),
+                  regex(~r/\r\n/, &ignore/2)], action).({acc, input})
+      end
+
+      def body({[headers, _status_line]=acc, input}) do
+        length = Keyword.get(headers, :content_length, "0") |> String.to_integer
+        bytes(length).({acc, input})
+      end
     end
   end
 
@@ -144,7 +154,7 @@ defmodule DongraeTrader.HTTP do
       case :gen_tcp.recv(conn.socket, 0) do
         {:ok, packet} ->
           recv_buf = recv_buf <> packet
-          case Response.decode(recv_buf) do
+          case Response.Decoder.decode(recv_buf) do
             {:ok, {response, <<>>}} -> {:ok, response}
             {:error, :unexpected_end_of_input} -> _recv_response(conn, recv_buf)
             {:error, _} = error -> error
