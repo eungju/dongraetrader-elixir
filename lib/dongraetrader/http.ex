@@ -34,35 +34,36 @@ defmodule DongraeTrader.HTTP do
     defstruct method: nil, uri: nil, version: nil, headers: [], body: <<>>
 
     def get(uri) do
-      %Request{method: :get, uri: uri, version: :http_1_1}
+      %__MODULE__{method: :get, uri: uri, version: :http_1_1}
     end
 
     def post(uri, content_type, body) do
       headers = [content_type: content_type,
                  content_length: IO.iodata_length(body)]
-      %Request{method: :post, uri: uri, version: :http_1_1,
-               headers: headers, body: body}
+      %__MODULE__{method: :post, uri: uri, version: :http_1_1,
+                  headers: headers, body: body}
     end
 
-    def encode(request) do
-      [encode_request_line(request.method, request.uri, request.version),
-       encode_headers(request.headers),
-       "\r\n",
-       request.body]
-    end
+    defmodule Encoder do
+      def encode(request) do
+        [encode_request_line(request.method, request.uri, request.version),
+         encode_headers(request.headers),
+         "\r\n",
+         request.body]
+      end
 
-    def encode_request_line(method, uri, version) do
-      [Method.to_string(method),
-       " ", uri,
-       " ", Version.to_string(version), "\r\n"]
-    end
+      def encode_request_line(method, uri, version) do
+        [Method.to_string(method), " ", uri, " ", Version.to_string(version),
+         "\r\n"]
+      end
 
-    def encode_headers(headers) do
-      Enum.map(headers, fn header -> encode_header(header) end)
-    end
+      def encode_headers(headers) do
+        Enum.map(headers, fn header -> encode_header(header) end)
+      end
 
-    def encode_header({name, value}) do
-      [Header.Name.to_string(name), ": ", to_string(value), "\r\n"]
+      def encode_header({name, value}) do
+        [Header.Name.to_string(name), ": ", to_string(value), "\r\n"]
+      end
     end
   end
 
@@ -146,7 +147,7 @@ defmodule DongraeTrader.HTTP do
     end
 
     def _send_request(conn, request) do
-      send_buf = Request.encode(decorate_request(conn, request))
+      send_buf = Request.Encoder.encode(decorate_request(conn, request))
       :gen_tcp.send(conn.socket, send_buf)
     end
 
