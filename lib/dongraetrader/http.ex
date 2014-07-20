@@ -89,16 +89,27 @@ defmodule DongraeTrader.HTTP do
       end
 
       def status_line({acc, input}) do
-        action = transform_and_cons(fn [r, c, v] ->
-                                      {Version.from_string(v),
-                                       String.to_integer(c), r}
+        action = transform_and_cons(fn [reason, code, version] ->
+                                      {version, code, reason}
                                     end)
-        sequence([regex(~r/HTTP\/\d+\.\d+/),
+        sequence([http_version,
                   regex(~r/ /, &ignore/2),
-                  regex(~r/\d+/),
+                  status_code,
                   regex(~r/ /, &ignore/2),
-                  regex(~r/[^\r\n]+/),
+                  reason_phrase,
                   regex(~r/\r\n/, &ignore/2)], action).({acc, input})
+      end
+
+      defp http_version() do
+        regex(~r/HTTP\/\d+\.\d+/, transform_and_cons(&Version.from_string/1))
+      end
+
+      defp status_code() do
+        regex(~r/\d+/, transform_and_cons(&String.to_integer/1))
+      end
+
+      defp reason_phrase() do
+        regex(~r/[^\r\n]+/)
       end
 
       def headers({acc, input}) do
