@@ -97,7 +97,7 @@ defmodule DongraeTrader.HTTP do
                   regex(~r/ /, &ignore/2),
                   regex(~r/\d+/),
                   regex(~r/ /, &ignore/2),
-                  regex(~r/[^\r]+/),
+                  regex(~r/[^\r\n]+/),
                   regex(~r/\r\n/, &ignore/2)], action).({acc, input})
       end
 
