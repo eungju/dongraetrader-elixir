@@ -148,7 +148,7 @@ defmodule DongraeTrader.HTTP do
     end
 
     def stop(server) do
-      GenServer.call(server, {:stop})
+      GenServer.call(server, :stop)
     end
 
     ## Callbacks
@@ -180,7 +180,7 @@ defmodule DongraeTrader.HTTP do
       end
     end
 
-    def handle_call({:stop}, _from, conn) do
+    def handle_call(:stop, _from, conn) do
       {:stop, :normal, :ok, conn}
     end
 

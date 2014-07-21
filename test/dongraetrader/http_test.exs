@@ -33,7 +33,7 @@ defmodule DongraeTrader.HTTPTest do
     :ok = HTTP.Connection.stop(pid)
   end
 
-  test "close connection if the response indicate connection close" do
+  test "close connection if the response indicates connection close" do
     void_req = HTTP.Request.get("/rpc/void")
     void_req = %{void_req | headers: [{:connection, :close}|void_req.headers]}
     {:ok, pid} = HTTP.Connection.start_link("localhost", 1978)
