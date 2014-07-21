@@ -135,26 +135,53 @@ defmodule DongraeTrader.HTTP do
   end
 
   defmodule Connection do
+    use GenServer
+
     defstruct host: nil, port: nil, socket: nil
 
-    def open(host, port) do
+    def start_link(host, port, opts \\ []) do
+      GenServer.start_link(__MODULE__, {:ok, %__MODULE__{host: host, port: port}}, opts)
+    end
+
+    def call(server, request) do
+      GenServer.call(server, {:call, request})
+    end
+
+    def stop(server) do
+      GenServer.call(server, {:stop})
+    end
+
+    ## Callbacks
+
+    def init({:ok, conn}) do
       options = [:binary, active: false]
-      case :gen_tcp.connect(to_char_list(host), port, options) do
-        {:ok, socket} ->
-          {:ok, %Connection{host: host, port: port, socket: socket}}
-        {:error, _} = error -> error
+      case :gen_tcp.connect(to_char_list(conn.host), conn.port, options) do
+        {:ok, socket} -> {:ok, %{conn | socket: socket}}
+        {:error, reason} -> {:stop, reason}
       end
     end
 
-    def close(conn) do
+    def terminate(_reason, conn) do
       :gen_tcp.close(conn.socket)
     end
 
-    def call(conn, request) do
+    def handle_call({:call, request}, _from, conn) do
       case _send_request(conn, request) do
-        :ok -> _recv_response(conn, <<>>)
-        {:error, _} = error -> error
+        :ok ->
+          case _recv_response(conn, <<>>) do
+            {:ok, response} ->
+              case Keyword.get(response.headers, :connection, "keep-alive") do
+                "close" -> {:stop, :normal, {:ok, response}, conn}
+                _ -> {:reply, {:ok, response}, conn}
+              end
+            {:error, reason} -> {:stop, reason, :error, conn}
+          end
+        {:error, reason} -> {:stop, reason, :error, conn}
       end
+    end
+
+    def handle_call({:stop}, _from, conn) do
+      {:stop, :normal, :ok, conn}
     end
 
     def _send_request(conn, request) do
