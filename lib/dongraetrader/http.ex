@@ -38,10 +38,8 @@ defmodule DongraeTrader.HTTP do
     end
 
     def post(uri, content_type, body) do
-      headers = [content_type: content_type,
-                 content_length: IO.iodata_length(body)]
       %__MODULE__{method: :post, uri: uri, version: :http_1_1,
-                  headers: headers, body: body}
+                  headers: [content_type: content_type], body: body}
     end
 
     defmodule Encoder do
@@ -185,7 +183,7 @@ defmodule DongraeTrader.HTTP do
     end
 
     def _send_request(conn, request) do
-      send_buf = Request.Encoder.encode(decorate_request(conn, request))
+      send_buf = Request.Encoder.encode(normalize_request(conn, request))
       :gen_tcp.send(conn.socket, send_buf)
     end
 
@@ -203,9 +201,12 @@ defmodule DongraeTrader.HTTP do
       end
     end
 
-    def decorate_request(conn, request) do
+    def normalize_request(conn, request) do
       host_value = conn.host <> ":" <> to_string(conn.port)
-      %{request | headers: Keyword.put_new(request.headers, :host, host_value)}
+      headers = request.headers
+      |> Keyword.put_new(:host, host_value)
+      |> Keyword.put_new(:content_length, IO.iodata_length(request.body))
+      %{request | headers: headers}
     end
   end
 end

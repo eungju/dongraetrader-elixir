@@ -2,10 +2,16 @@ defmodule DongraeTrader.HTTPTest do
   use ExUnit.Case
   alias DongraeTrader.HTTP, as: HTTP
 
-  test "decorate request with Host header" do
+  test "put Host header to the request if it doesn't exist" do
     conn = %HTTP.Connection{host: "localhost", port: 1978}
-    actual = HTTP.Connection.decorate_request(conn, HTTP.Request.get("/"))
+    actual = HTTP.Connection.normalize_request(conn, HTTP.Request.get("/"))
     assert actual.headers |> Keyword.get(:host) == "localhost:1978"
+  end
+
+  test "put Content-Length header to the request if it doesn't exist" do
+    conn = %HTTP.Connection{host: "localhost", port: 1978}
+    actual = HTTP.Connection.normalize_request(conn, HTTP.Request.post("/", "text/plain", "Hello, World!"))
+    assert actual.headers |> Keyword.get(:content_length) == 13
   end
 
   test "opening and closing a connection" do

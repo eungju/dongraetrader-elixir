@@ -25,6 +25,6 @@ defmodule DongraeTrader.HTTP.RequestTest do
 
   test "encode POST request" do
     actual = DUT.Encoder.encode(DUT.post("/hello-world", "application/x-www-form-urlencoded", "name=EP"))
-    assert IO.iodata_to_binary(actual) == "POST /hello-world HTTP/1.1\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 7\r\n\r\nname=EP"
+    assert IO.iodata_to_binary(actual) == "POST /hello-world HTTP/1.1\r\nContent-Type: application/x-www-form-urlencoded\r\n\r\nname=EP"
   end
 end
